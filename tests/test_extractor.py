@@ -255,5 +255,71 @@ class TestCli(unittest.TestCase):
             mock_extract.assert_called_once()
 
 
+try:
+    _original_dir = os.getcwd()
+    try:
+        os.chdir("/tmp")
+        from mcp.types import TextContent as _MCPTextContent
+        _MCP_AVAILABLE = True
+    except ImportError:
+        _MCP_AVAILABLE = False
+    finally:
+        os.chdir(_original_dir)
+except Exception:
+    _MCP_AVAILABLE = False
+
+
+@unittest.skipUnless(_MCP_AVAILABLE, "MCP package not installed")
+class TestExtractContentMCPTool(unittest.IsolatedAsyncioTestCase):
+    """Tests for the extract_content MCP tool routing."""
+
+    async def test_list_tools_includes_extract_content(self):
+        from skill_seekers.mcp import server as mcp_server
+
+        tools = await mcp_server.list_tools()
+        names = [t.name for t in tools]
+        self.assertIn("extract_content", names)
+
+    async def test_call_tool_routes_to_extract(self):
+        from skill_seekers.mcp import server as mcp_server
+
+        fake_response = MagicMock()
+        fake_response.text = SAMPLE_HTML
+        fake_response.raise_for_status = MagicMock()
+        with patch.object(extractor, "requests") as mock_requests:
+            mock_requests.get.return_value = fake_response
+            result = await mcp_server.call_tool(
+                "extract_content",
+                {"url": "https://example.com/x", "format": "text", "max_chars": -1},
+            )
+        self.assertEqual(len(result), 1)
+        self.assertIn("Sample Docs", result[0].text)
+        self.assertIn("code blocks", result[0].text)
+
+    async def test_requires_exactly_one_source(self):
+        from skill_seekers.mcp import server as mcp_server
+
+        result = await mcp_server.extract_content_tool({})
+        self.assertIn("exactly one", result[0].text)
+
+        result = await mcp_server.extract_content_tool(
+            {"url": "https://example.com/x", "file": "page.html"}
+        )
+        self.assertIn("exactly one", result[0].text)
+
+    async def test_truncates_long_output(self):
+        from skill_seekers.mcp import server as mcp_server
+
+        fake_response = MagicMock()
+        fake_response.text = SAMPLE_HTML
+        fake_response.raise_for_status = MagicMock()
+        with patch.object(extractor, "requests") as mock_requests:
+            mock_requests.get.return_value = fake_response
+            result = await mcp_server.extract_content_tool(
+                {"url": "https://example.com/x", "max_chars": 50}
+            )
+        self.assertIn("[Output truncated...]", result[0].text)
+
+
 if __name__ == "__main__":
     unittest.main()

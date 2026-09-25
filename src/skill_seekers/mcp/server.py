@@ -355,6 +355,42 @@ async def list_tools() -> list[Tool]:
             },
         ),
         Tool(
+            name="extract_content",
+            description="Extract clean content from a single URL, HTML file, or PDF without crawling. Fast preview before a full scrape; returns Markdown (or JSON/text) plus extraction stats.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "url": {
+                        "type": "string",
+                        "description": "Single documentation URL to extract (e.g., https://react.dev/learn)",
+                    },
+                    "file": {
+                        "type": "string",
+                        "description": "Local HTML file path to extract",
+                    },
+                    "pdf": {
+                        "type": "string",
+                        "description": "Local PDF file path to extract",
+                    },
+                    "selector": {
+                        "type": "string",
+                        "description": "CSS selector for main content (default: auto-detect)",
+                    },
+                    "format": {
+                        "type": "string",
+                        "description": "Output format: markdown, json, or text (default: markdown)",
+                        "default": "markdown",
+                    },
+                    "max_chars": {
+                        "type": "integer",
+                        "description": "Truncate output to this many characters (default: 20000, use -1 for unlimited)",
+                        "default": 20000,
+                    },
+                },
+                "required": [],
+            },
+        ),
+        Tool(
             name="scrape_github",
             description="Scrape GitHub repository and build Claude skill. Extracts README, Issues, Changelog, Releases, and code structure.",
             inputSchema={
@@ -439,6 +475,8 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
             return await scrape_pdf_tool(arguments)
         elif name == "scrape_github":
             return await scrape_github_tool(arguments)
+        elif name == "extract_content":
+            return await extract_content_tool(arguments)
         else:
             return [TextContent(type="text", text=f"Unknown tool: {name}")]
 
@@ -1041,6 +1079,63 @@ async def scrape_github_tool(args: dict) -> list[TextContent]:
         return [TextContent(type="text", text=output)]
     else:
         return [TextContent(type="text", text=f"{output}\n\n❌ Error:\n{stderr}")]
+
+
+async def extract_content_tool(args: dict) -> list[TextContent]:
+    """Extract clean content from a single URL, HTML file, or PDF (no crawling).
+
+    Fast in-process preview routed to the single-shot extractor: ideal for
+    checking selectors and content quality before a full scrape, or for
+    converting one page/document to Markdown.
+    """
+    url = args.get("url")
+    file = args.get("file")
+    pdf = args.get("pdf")
+    selector = args.get("selector")
+    fmt = args.get("format", "markdown")
+    max_chars = args.get("max_chars", 20000)
+
+    provided = [bool(url), bool(file), bool(pdf)]
+    if sum(provided) != 1:
+        return [TextContent(
+            type="text",
+            text="❌ Error: Specify exactly one of 'url', 'file', or 'pdf'",
+        )]
+
+    try:
+        from skill_seekers.cli.extractor import (
+            extract_from_html_file,
+            extract_from_pdf,
+            extract_from_url,
+            format_output,
+        )
+    except ImportError as e:
+        return [TextContent(type="text", text=f"❌ Error: extractor unavailable: {e}")]
+
+    try:
+        if url:
+            data = extract_from_url(url, selector=selector)
+        elif file:
+            data = extract_from_html_file(file, selector=selector)
+        else:
+            data = extract_from_pdf(pdf)
+        output = format_output(data, fmt)
+    except (FileNotFoundError, ValueError, RuntimeError) as e:
+        return [TextContent(type="text", text=f"❌ Error: {e}")]
+    except Exception as e:
+        return [TextContent(type="text", text=f"❌ Error extracting content: {e}")]
+
+    header = (
+        f"✅ Extracted from `{data.get('source', '')}`\n"
+        f"📄 {data.get('char_count', 0):,} chars | "
+        f"💻 {data.get('code_blocks_count', 0)} code blocks | "
+        f"🎯 selector: {data.get('selector_used', '')}\n\n"
+    )
+
+    if isinstance(max_chars, int) and max_chars >= 0 and len(output) > max_chars:
+        output = output[:max_chars] + "\n\n[Output truncated...]"
+
+    return [TextContent(type="text", text=header + output)]
 
 
 async def main():
