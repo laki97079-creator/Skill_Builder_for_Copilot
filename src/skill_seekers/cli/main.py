@@ -9,6 +9,7 @@ Usage:
 
 Commands:
     scrape      Scrape documentation website
+    extract     Extract a single URL/file/PDF (no crawling)
     github      Scrape GitHub repository
     pdf         Extract from PDF file
     unified     Multi-source scraping (docs + GitHub + PDF)
@@ -39,6 +40,9 @@ def create_parser() -> argparse.ArgumentParser:
 Examples:
   # Scrape documentation
   skill-seekers scrape --config configs/react.json
+
+  # Extract a single page (no crawling)
+  skill-seekers extract --url https://react.dev/learn --format markdown
 
   # Scrape GitHub repository
   skill-seekers github --repo microsoft/TypeScript --name typescript
@@ -86,6 +90,22 @@ For more information: https://github.com/yusufkaraaslan/Skill_Seekers
     scrape_parser.add_argument("--dry-run", action="store_true", help="Dry run mode")
     scrape_parser.add_argument("--async", dest="async_mode", action="store_true", help="Use async scraping")
     scrape_parser.add_argument("--workers", type=int, help="Number of async workers")
+
+    # === extract subcommand ===
+    extract_parser = subparsers.add_parser(
+        "extract",
+        help="Extract a single URL/file/PDF (no crawling)",
+        description="Extract clean content from a single URL, HTML file, or PDF"
+    )
+    extract_source = extract_parser.add_mutually_exclusive_group(required=True)
+    extract_source.add_argument("--url", help="Single documentation URL to extract")
+    extract_source.add_argument("--file", help="Local HTML file to extract")
+    extract_source.add_argument("--pdf", help="Local PDF file to extract")
+    extract_parser.add_argument("--selector", help="CSS selector for main content (default: auto-detect)")
+    extract_parser.add_argument("--format", choices=["markdown", "json", "text"], default="markdown",
+                                help="Output format (default: markdown)")
+    extract_parser.add_argument("-o", "--output", help="Output file path (default: print to stdout)")
+    extract_parser.add_argument("--timeout", type=int, default=30, help="HTTP timeout in seconds")
 
     # === github subcommand ===
     github_parser = subparsers.add_parser(
@@ -202,6 +222,23 @@ def main(argv: Optional[List[str]] = None) -> int:
             if args.workers:
                 sys.argv.extend(["--workers", str(args.workers)])
             return scrape_main() or 0
+
+        elif args.command == "extract":
+            from skill_seekers.cli.extractor import main as extract_main
+            extract_argv: List[str] = []
+            if args.url:
+                extract_argv.extend(["--url", args.url])
+            if args.file:
+                extract_argv.extend(["--file", args.file])
+            if args.pdf:
+                extract_argv.extend(["--pdf", args.pdf])
+            if args.selector:
+                extract_argv.extend(["--selector", args.selector])
+            extract_argv.extend(["--format", args.format])
+            if args.output:
+                extract_argv.extend(["--output", args.output])
+            extract_argv.extend(["--timeout", str(args.timeout)])
+            return extract_main(extract_argv) or 0
 
         elif args.command == "github":
             from skill_seekers.cli.github_scraper import main as github_main
