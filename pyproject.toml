@@ -99,6 +99,7 @@ skill-seekers = "skill_seekers.cli.main:main"
 
 # Individual tool entry points
 skill-seekers-scrape = "skill_seekers.cli.doc_scraper:main"
+skill-seekers-extract = "skill_seekers.cli.extractor:main"
 skill-seekers-github = "skill_seekers.cli.github_scraper:main"
 skill-seekers-pdf = "skill_seekers.cli.pdf_scraper:main"
 skill-seekers-unified = "skill_seekers.cli.unified_scraper:main"

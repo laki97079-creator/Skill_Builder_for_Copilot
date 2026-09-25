@@ -192,6 +192,24 @@ skill-seekers scrape --url https://react.dev --name react
 skill-seekers scrape --config configs/godot.json --async --workers 8
 ```
 
+### Single-shot extraction (preview one page, no crawling)
+
+```bash
+# Preview what a full scrape would capture from one page
+skill-seekers extract --url https://react.dev/learn --format markdown
+
+# Save to file, or get JSON for scripting
+skill-seekers extract --url https://react.dev/learn -o intro.md
+skill-seekers extract --url https://react.dev/learn --format json
+
+# Local HTML file or PDF
+skill-seekers extract --file page.html --selector article
+skill-seekers extract --pdf docs/manual.pdf -o manual.md
+```
+
+**Time:** seconds | **Quality:** Same extraction engine as `scrape` | **Cost:** Free
+Use it to validate selectors and content quality *before* committing to a 20-40 minute scrape. Also available in Claude Code via the `extract_content` MCP tool.
+
 ### PDF Extraction
 
 ```bash
